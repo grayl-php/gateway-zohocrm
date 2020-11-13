@@ -3,6 +3,8 @@
    namespace Grayl\Gateway\ZohoCRM;
 
    use Grayl\Gateway\Common\GatewayPorterAbstract;
+   use Grayl\Gateway\ZohoCRM\Config\ZohoCRMAPIEndpoint;
+   use Grayl\Gateway\ZohoCRM\Config\ZohoCRMConfig;
    use Grayl\Gateway\ZohoCRM\Controller\ZohoCRMAddNoteRequestController;
    use Grayl\Gateway\ZohoCRM\Controller\ZohoCRMUpsertContactRequestController;
    use Grayl\Gateway\ZohoCRM\Entity\ZohoCRMAddNoteRequestData;
@@ -19,7 +21,7 @@
 
    /**
     * Front-end for the ZohoCRM package
-    * @method ZohoCRMGatewayData getSavedGatewayDataEntity ( string $endpoint_id )
+    * @method ZohoCRMGatewayData getSavedGatewayDataEntity ( string $api_endpoint_id )
     *
     * @package Grayl\Gateway\ZohoCRM
     */
@@ -34,34 +36,41 @@
        *
        * @var string
        */
-      protected string $config_file = 'gateway.zohocrm.php';
+      protected string $config_file = 'gateway-zohocrm.php';
+
+      /**
+       * The ZohoCRMConfig instance for this gateway
+       *
+       * @var ZohoCRMConfig
+       */
+      protected $config;
 
 
       /**
        * Creates a new ZohoCRM object for use in a ZohoCRMGatewayData entity
        *
-       * @param array $credentials An array containing all of the credentials needed to create the gateway API
+       * @param ZohoCRMAPIEndpoint $api_endpoint A ZohoCRMAPIEndpoint with credentials needed to create a gateway API object
        *
        * @return ZCRMRestClient
        * @throws \Exception
        */
-      public function newGatewayAPI ( array $credentials ): object
+      public function newGatewayAPI ( $api_endpoint ): object
       {
 
          // Create the configuration array
-         $configuration = [ 'client_id'              => $credentials[ 'client_id' ],
-                            'client_secret'          => $credentials[ 'client_secret' ],
-                            'redirect_uri'           => $credentials[ 'redirect_uri' ],
-                            'currentUserEmail'       => $credentials[ 'currentUserEmail' ],
-                            'token_persistence_path' => $credentials[ 'token_persistence_path' ], ];
+         $configuration = [ 'client_id'              => $api_endpoint->getClientId(),
+                            'client_secret'          => $api_endpoint->getClientSecret(),
+                            'redirect_uri'           => $api_endpoint->getRedirectURI(),
+                            'currentUserEmail'       => $api_endpoint->getUserEmail(),
+                            'token_persistence_path' => $api_endpoint->getTokenPersistencePath(), ];
 
          // Initialize the ZCRMRestClient with the configuration
          ZCRMRestClient::initialize( $configuration );
 
          // Update OAuth tokens
          ZohoOAuth::getClientInstance()
-                  ->generateAccessTokenFromRefreshToken( $credentials[ 'refresh_token' ],
-                                                         $credentials[ 'identifier' ] );
+                  ->generateAccessTokenFromRefreshToken( $api_endpoint->getRefreshToken(),
+                                                         $api_endpoint->getIdentifier() );
 
          // Return the new API entity
          return ZCRMRestClient::getInstance();
@@ -71,21 +80,21 @@
       /**
        * Creates a new ZohoCRMGatewayData entity
        *
-       * @param string $endpoint_id The API endpoint ID to use (typically "default" is there is only one API gateway)
+       * @param string $api_endpoint_id The API endpoint ID to use (typically "default" if there is only one API gateway)
        *
        * @return ZohoCRMGatewayData
        * @throws \Exception
        */
-      public function newGatewayDataEntity ( string $endpoint_id ): object
+      public function newGatewayDataEntity ( string $api_endpoint_id ): object
       {
 
          // Grab the gateway service
          $service = new ZohoCRMGatewayService();
 
-         // Get an API
-         $api = $this->newGatewayAPI( $service->getAPICredentials( $this->config,
-                                                                   $this->environment,
-                                                                   $endpoint_id ) );
+         // Get a new API
+         $api = $this->newGatewayAPI( $service->getAPIEndpoint( $this->config,
+                                                                $this->environment,
+                                                                $api_endpoint_id ) );
 
          // Configure the API as needed using the service
          $service->configureAPI( $api,
@@ -93,7 +102,7 @@
 
          // Return the gateway
          return new ZohoCRMGatewayData( $api,
-                                        $this->config->getConfig( 'name' ),
+                                        $this->config->getGatewayName(),
                                         $this->environment );
       }
 
